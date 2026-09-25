@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Refuse de pousser un historique contenant une attribution d'outil IA.
+set -uo pipefail
+
+REMOTE_REF_BASE=""
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  REMOTE_REF_BASE="$remote_ref"
+done
+
+RANGE="HEAD"
+if git rev-parse --verify --quiet "@{upstream}" >/dev/null 2>&1; then
+  RANGE="@{upstream}..HEAD"
+fi
+
+BAD=$(git log --format='%H %an <%ae>%n%b' "$RANGE" 2>/dev/null \
+  | grep -inE 'co-authored-by:.*(claude|anthropic|copilot|chatgpt|openai|gemini)|claude-session:|generated with \[?claude|noreply@anthropic\.com' \
+  || true)
+
+if [ -n "$BAD" ]; then
+  echo "PUSH REFUSÉ : attribution d'outil IA détectée dans l'historique." >&2
+  echo "$BAD" >&2
+  echo >&2
+  echo "Corrige avec :  git rebase -i --exec 'git commit --amend --no-edit' <base>" >&2
+  echo "ou réécris les auteurs :  git filter-branch --env-filter ... (voir CONTRIBUTING.md)" >&2
+  exit 1
+fi
+exit 0

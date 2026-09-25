@@ -1,0 +1,32 @@
+#!/bin/bash
+# Supprime toute trace d'attribution IA / Claude des messages de commit.
+# Politique projet Ivoire-LMS : aucun co-auteur ni mention d'outil IA dans l'historique.
+MSG_FILE="$1"
+[ -f "$MSG_FILE" ] || exit 0
+
+python3 - "$MSG_FILE" <<'PY'
+import re, sys
+p = sys.argv[1]
+with open(p, encoding='utf-8') as f:
+    lines = f.read().split('\n')
+
+BANNED = re.compile(
+    r'(co-authored-by\s*:.*(claude|anthropic|noreply@anthropic))'
+    r'|(claude-session\s*:)'
+    r'|(generated\s+with\s+\[?claude)'
+    r'|(🤖\s*generated)'
+    r'|(https?://claude\.ai/code/session)'
+    r'|(co-authored-by\s*:.*(copilot|chatgpt|openai|gemini))',
+    re.IGNORECASE)
+
+kept = [l for l in lines if not BANNED.search(l)]
+
+# nettoie les lignes vides et les séparateurs '---' orphelins en fin de message
+while kept and kept[-1].strip() in ('', '---'):
+    kept.pop()
+out = '\n'.join(kept) + '\n'
+
+with open(p, 'w', encoding='utf-8') as f:
+    f.write(out)
+PY
+exit 0

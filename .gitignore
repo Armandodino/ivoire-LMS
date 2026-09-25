@@ -1,0 +1,50 @@
+# Dépendances
+node_modules/
+vendor/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Build
+dist/
+build/
+*.egg-info/
+.next/
+out/
+
+# Environnement — ne JAMAIS committer de secret
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!*.pub
+
+# Données locales
+moodledata/
+/data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Journaux et temporaires
+*.log
+logs/
+tmp/
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Outils et OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Fichiers issus de l'outillage IA — interdits dans ce dépôt
+.claude/
+.aider*
+.cursor/

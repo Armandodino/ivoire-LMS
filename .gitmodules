@@ -1,0 +1,18 @@
+[submodule "engines/moodle"]
+	path = engines/moodle
+	url = https://github.com/moodle/moodle
+	branch = MOODLE_502_STABLE
+	shallow = true
+	update = checkout
+[submodule "engines/edx-platform"]
+	path = engines/edx-platform
+	url = https://github.com/openedx/edx-platform
+	branch = master
+	shallow = true
+	update = checkout
+[submodule "engines/bigbluebutton"]
+	path = engines/bigbluebutton
+	url = https://github.com/bigbluebutton/bigbluebutton
+	branch = v3.0.x-develop
+	shallow = true
+	update = checkout

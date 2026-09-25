@@ -1,0 +1,41 @@
+name: Aucune attribution IA
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  historique:
+    name: Vérifier auteurs et messages de commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refuser toute attribution d'outil IA
+        run: |
+          set -uo pipefail
+          MOTIFS='co-authored-by:.*(claude|anthropic|copilot|chatgpt|openai|gemini)|claude-session:|generated with \[?claude|🤖 generated|noreply@anthropic\.com'
+
+          echo "::group::Auteurs et corps de commit"
+          git log --format='%H | %an <%ae> | %cn <%ce>%n%b' | head -200
+          echo "::endgroup::"
+
+          if git log --format='%H | %an <%ae> | %cn <%ce>%n%b' | grep -inE "$MOTIFS"; then
+            echo "::error::Attribution d'outil IA détectée dans l'historique Git."
+            exit 1
+          fi
+          echo "Historique propre."
+
+      - name: Refuser toute attribution IA dans la description de la PR
+        if: github.event_name == 'pull_request'
+        env:
+          CORPS_PR: ${{ github.event.pull_request.body }}
+        run: |
+          set -uo pipefail
+          if printf '%s' "$CORPS_PR" | grep -inE 'generated with \[?claude|🤖 generated|claude\.ai/code/session|co-authored-by:.*(claude|anthropic)'; then
+            echo "::error::Attribution d'outil IA détectée dans la description de la pull request."
+            exit 1
+          fi
+          echo "Description de PR propre."
