@@ -61,6 +61,10 @@ if [ -f .env ]; then
   vert "  .env existe déjà — conservé tel quel"
 else
   cp .env.example .env
+  # Garage impose un secret RPC de 64 caractères hexadécimaux, format distinct
+  # des autres mots de passe : on le traite avant la boucle générique.
+  hex64="$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c 64)"
+  awk -v s="$hex64" '{sub(/CHANGE_ME_HEX64/, s); print}' .env > .env.tmp && mv .env.tmp .env
   # Remplace chaque CHANGE_ME par un secret distinct.
   while grep -q 'CHANGE_ME' .env; do
     secret="$(motdepasse)"
@@ -80,8 +84,8 @@ etape "Construction des images"
 "${COMPOSE[@]}" build moodle-php
 
 # ──────────────────────── 6. Données d'abord ─────────────────────────────
-etape "Démarrage de PostgreSQL et Redis"
-"${COMPOSE[@]}" up -d postgres redis
+etape "Démarrage de PostgreSQL et Valkey"
+"${COMPOSE[@]}" up -d postgres valkey
 
 printf '  Attente de PostgreSQL'
 for _ in $(seq 1 60); do
@@ -125,6 +129,32 @@ fi
 etape "Démarrage de la pile complète"
 "${COMPOSE[@]}" up -d
 
+# ─────────────────── 9. Initialisation de Garage ──────────────────────────
+# Un nœud Garage neuf refuse toute écriture tant qu'aucune disposition
+# (layout) ne lui a été assignée. C'est une étape unique, idempotente.
+etape "Initialisation du stockage objet Garage"
+printf '  Attente de Garage'
+for _ in $(seq 1 30); do
+  if "${COMPOSE[@]}" exec -T garage /garage status >/dev/null 2>&1; then
+    echo; break
+  fi
+  printf '.'; sleep 2
+done
+
+if "${COMPOSE[@]}" exec -T garage /garage layout show 2>/dev/null | grep -q 'NO ROLE\|No nodes'; then
+  noeud="$("${COMPOSE[@]}" exec -T garage /garage node id -q 2>/dev/null | cut -d'@' -f1 | tr -d '\r')"
+  if [ -n "$noeud" ]; then
+    "${COMPOSE[@]}" exec -T garage /garage layout assign -z ivoire -c 10G "$noeud" >/dev/null 2>&1 || true
+    "${COMPOSE[@]}" exec -T garage /garage layout apply --version 1   >/dev/null 2>&1 || true
+    vert "  Grappe Garage initialisée (1 nœud, zone ivoire)"
+  else
+    jaune "  Identifiant de nœud Garage introuvable — initialise à la main :"
+    jaune "    make garage-init"
+  fi
+else
+  vert "  Grappe Garage déjà initialisée"
+fi
+
 etape "État des services"
 "${COMPOSE[@]}" ps
 
@@ -141,7 +171,7 @@ $(vert "Environnement Ivoire-LMS prêt.")
     mot de passe         voir KEYCLOAK_ADMIN_PASSWORD dans .env
 
   Mailpit (courriels)    http://localhost:${MAILPIT_UI_PORT:-8025}
-  MinIO (stockage S3)    http://localhost:${MINIO_CONSOLE_PORT:-9001}
+  Garage (stockage S3)   http://localhost:${GARAGE_S3_PORT:-3900}  (API S3, pas d'interface web)
 
   Journaux               make logs
   Arrêt                  make down

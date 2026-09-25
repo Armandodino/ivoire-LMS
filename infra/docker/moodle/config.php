@@ -59,7 +59,10 @@ $CFG->reverseproxy = filter_var(
     getenv('MOODLE_REVERSE_PROXY') ?: 'false', FILTER_VALIDATE_BOOLEAN
 );
 
-// ── Cache et sessions dans Redis ─────────────────────────────────────────
+// ── Cache et sessions dans Valkey ────────────────────────────────────────
+// Les réglages gardent leur nom Moodle d'origine ($CFG->session_redis_*) :
+// Valkey est compatible au niveau protocole, l'extension phpredis s'y connecte
+// sans modification. Voir docs/architecture/02-briques-open-source.md.
 // Indispensable dès qu'il y a plus d'un conteneur PHP : sans cela, un utilisateur
 // perd sa session en changeant de conteneur.
 $redishost = getenv('MOODLE_REDIS_HOST');

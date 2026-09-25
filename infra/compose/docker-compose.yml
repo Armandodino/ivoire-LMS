@@ -1,7 +1,7 @@
 # Environnement de développement Ivoire-LMS — jalon 1.
 #
 # Profil par défaut (phase 1, cf. docs/adr/0004-phasage-des-moteurs.md) :
-#   postgres, redis, moodle-php, moodle-web, keycloak, mailpit, minio
+#   postgres, valkey, moodle-php, moodle-web, moodle-cron, keycloak, mailpit, garage
 # Profil openedx (phase 2, sur demande) : voir infra/compose/README.md
 #
 # Depuis la racine du dépôt :  make up
@@ -13,8 +13,9 @@ x-restart: &restart
 services:
   # ─────────────────────────────── Données ───────────────────────────────
   postgres:
-    # Moodle 5.2 exige PostgreSQL >= 16 (public/admin/environment.xml).
-    image: postgres:16-alpine
+    # Moodle 5.2 exige PostgreSQL >= 16, Moodle 5.3 exigera 17.
+    # On prend 17 tout de suite pour ne pas avoir à migrer à la montée de version.
+    image: postgres:17-alpine
     <<: *restart
     environment:
       POSTGRES_DB: ${MOODLE_DB_NAME:-moodle}
@@ -32,14 +33,19 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
 
-  redis:
-    image: redis:7-alpine
+  valkey:
+    # Valkey plutôt que Redis : BSD-3-Clause sous gouvernance Linux Foundation,
+    # là où Redis 8 est AGPLv3. Cohérent avec notre stratégie de limiter
+    # l'exposition au copyleft (cf. ADR 0004 et ADR 0005). Compatible au niveau
+    # protocole : l'extension phpredis et le gestionnaire de sessions Moodle
+    # fonctionnent sans modification.
+    image: valkey/valkey:9.0-alpine
     <<: *restart
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    command: ["valkey-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
     volumes:
-      - redis-data:/data
+      - valkey-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -53,7 +59,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      valkey:
         condition: service_healthy
     environment:
       MOODLE_DB_HOST: postgres
@@ -61,7 +67,7 @@ services:
       MOODLE_DB_USER: ${MOODLE_DB_USER:-moodle}
       MOODLE_DB_PASSWORD: ${MOODLE_DB_PASSWORD:?}
       MOODLE_WWWROOT: ${MOODLE_WWWROOT:-http://localhost:8080}
-      MOODLE_REDIS_HOST: redis
+      MOODLE_REDIS_HOST: valkey
       MOODLE_SMTP_HOST: mailpit:1025
       MOODLE_DEBUG: ${MOODLE_DEBUG:-true}
       # Configuration BBB injectée par platform/integrations/bbb (jalon 4).
@@ -79,7 +85,7 @@ services:
       - ../../plugins/moodle:/var/www/html/public/local/ivoire:ro
 
   moodle-web:
-    image: nginx:1.27-alpine
+    image: nginx:1.30-alpine
     <<: *restart
     depends_on: [moodle-php]
     volumes:
@@ -109,7 +115,7 @@ services:
       MOODLE_DB_USER: ${MOODLE_DB_USER:-moodle}
       MOODLE_DB_PASSWORD: ${MOODLE_DB_PASSWORD:?}
       MOODLE_WWWROOT: ${MOODLE_WWWROOT:-http://localhost:8080}
-      MOODLE_REDIS_HOST: redis
+      MOODLE_REDIS_HOST: valkey
       BBB_SERVER_URL: ${BBB_SERVER_URL:-}
       BBB_SHARED_SECRET: ${BBB_SHARED_SECRET:-}
     volumes:
@@ -119,7 +125,9 @@ services:
 
   # ───────────────────── Identité unique (jalon 2) ──────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    # 26.7.4 (16/09/2026) : seule la ligne 26.7 est maintenue, et elle corrige
+    # des CVE dont une élévation de privilèges. Ne pas rester sur 26.0.
+    image: quay.io/keycloak/keycloak:26.7.4
     <<: *restart
     command: ["start-dev", "--import-realm"]
     depends_on:
@@ -144,28 +152,33 @@ services:
   mailpit:
     # Moodle envoie beaucoup de courriels ; on les intercepte au lieu de les
     # envoyer réellement pendant le développement.
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.31.2
     <<: *restart
     ports:
       - "${MAILPIT_UI_PORT:-8025}:8025"
 
-  minio:
-    # Stockage objet compatible S3 : les fichiers de cours et les enregistrements
-    # BBB iront là en production, autant travailler dessus dès le début.
-    image: minio/minio:latest
+  garage:
+    # Remplace MinIO, dont le dépôt communautaire a été ARCHIVÉ le 25/04/2026
+    # ("THIS REPOSITORY IS NO LONGER MAINTAINED", plus de binaires publiés).
+    # Garage est écrit en Rust par Deuxfleurs, tourne sur du matériel modeste,
+    # tolère 200 ms de latence entre nœuds et réplique sur plusieurs sites :
+    # exactement la contrainte d'une infrastructure répartie en Côte d'Ivoire.
+    image: dxflrs/garage:v2.4.1
     <<: *restart
-    command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_USER:-ivoirelms}
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?MINIO_PASSWORD manquant dans .env}
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET manquant dans .env}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN manquant dans .env}
     volumes:
-      - minio-data:/data
+      - ../docker/garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${GARAGE_S3_PORT:-3900}:3900"
+      - "${GARAGE_ADMIN_PORT:-3903}:3903"
 
 volumes:
   postgres-data:
-  redis-data:
+  valkey-data:
   moodledata:
-  minio-data:
+  garage-meta:
+  garage-data:

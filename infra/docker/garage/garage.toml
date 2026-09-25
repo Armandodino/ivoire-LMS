@@ -1,0 +1,28 @@
+# Garage — stockage objet compatible S3, en remplacement de MinIO (archivé).
+# Configuration de DÉVELOPPEMENT : un seul nœud, réplication 1.
+# En production : au moins 3 nœuds sur des sites distincts, replication_factor = 3.
+# Les secrets ne sont pas ici : ils arrivent par GARAGE_RPC_SECRET et
+# GARAGE_ADMIN_TOKEN (variables d'environnement lues par Garage).
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir     = "/var/lib/garage/data"
+db_engine    = "sqlite"
+
+# Un seul nœud en développement. NE PAS reprendre tel quel en production.
+replication_factor = 1
+
+rpc_bind_addr   = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region     = "ivoire"
+api_bind_addr = "[::]:3900"
+root_domain   = ".s3.garage.localhost"
+
+[s3_web]
+bind_addr   = "[::]:3902"
+root_domain = ".web.garage.localhost"
+index       = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"

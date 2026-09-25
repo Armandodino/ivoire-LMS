@@ -110,7 +110,7 @@ d'alphabétisation et de formation professionnelle.
 | `gateway`, `shell-ui`, `control-plane`, `identity`, `billing` | Kubernetes | Sans état ou presque, mise à l'échelle horizontale |
 | Moodle (PHP-FPM + nginx) | Kubernetes, un déploiement par tenant ou par grappe de tenants | Isolation des données par tenant |
 | Open edX | Kubernetes via Tutor | Tutor est le mode de déploiement de référence de l'amont |
-| PostgreSQL / MySQL, Redis, MinIO/S3 | Services gérés ou opérateurs | Sauvegarde et restauration éprouvées |
+| PostgreSQL, Valkey, Garage (S3) | Services gérés ou opérateurs | Sauvegarde et restauration éprouvées |
 | BigBlueButton | Machines dédiées hors cluster, derrière un répartiteur | Exige un OS précis et l'accès direct au réseau média |
 
 ## Ordre de construction

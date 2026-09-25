@@ -6,7 +6,7 @@ SERVICE  ?=
 
 .PHONY: help bootstrap hooks up down restart stop logs ps shell psql cron purge \
         engines engines-shallow engines-status engines-update verify-authors \
-        up-openedx check
+        up-openedx check veille garage-init
 
 help: ## Affiche cette aide
 	@echo "Ivoire-LMS — commandes disponibles"
@@ -66,6 +66,12 @@ psql: ## Ouvre une console PostgreSQL
 cron: ## Force une exécution immédiate du cron Moodle
 	@$(COMPOSE) exec moodle-php php /var/www/html/admin/cli/cron.php
 
+garage-init: ## Initialise la grappe Garage (fait par bootstrap, à rejouer si besoin)
+	@noeud=$$($(COMPOSE) exec -T garage /garage node id -q | cut -d@ -f1 | tr -d '\r') ; \
+	 $(COMPOSE) exec -T garage /garage layout assign -z ivoire -c 10G "$$noeud" ; \
+	 $(COMPOSE) exec -T garage /garage layout apply --version 1 ; \
+	 $(COMPOSE) exec -T garage /garage status
+
 purge: ## DESTRUCTIF : supprime conteneurs ET volumes (toutes les données locales)
 	@read -p "Supprimer définitivement toutes les données locales ? [oui/N] " r ; \
 	 if [ "$$r" = "oui" ]; then $(COMPOSE) down -v ; echo "Volumes supprimés." ; \
@@ -84,6 +90,13 @@ engines-status: ## Affiche la version figée de chaque moteur
 engines-update: ## Avance les moteurs sur leur branche suivie (à relire avant commit)
 	@git submodule update --remote --merge
 	@echo "Relis 'git diff' puis committe la montée de version avec un message explicite."
+
+# ──────────────────────── Veille technologique ───────────────────────────
+veille: ## Vérifie qu'aucune brique amont n'est morte ou en fin de vie
+	@python3 scripts/verifier-amont.py
+
+veille-logique: ## Vérifie la logique du détecteur, sans réseau
+	@python3 scripts/verifier-amont.py --autotest
 
 # ─────────────────────────── Conformité ──────────────────────────────────
 verify-authors: ## Vérifie qu'aucune attribution d'outil IA ne traîne dans l'historique

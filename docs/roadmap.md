@@ -12,14 +12,19 @@
 
 Objectif : `make bootstrap` suffit sur une machine neuve.
 
-- [x] `infra/compose` : Moodle 5.2 (PHP 8.3 + PostgreSQL 16 + Redis), conforme aux
+- [x] `infra/compose` : Moodle 5.2 (PHP 8.3 + PostgreSQL 17 + Valkey), conforme aux
       exigences lues dans `public/admin/environment.xml`
 - [x] `infra/docker/moodle` : image PHP 8.3 avec contrôle bloquant des 20 extensions requises
 - [x] `config.php` piloté par l'environnement, sans secret en dur, monté en lecture seule
 - [x] Conteneur de cron séparé, cron web interdit (`$CFG->cronclionly`)
 - [x] `platform/identity` : Keycloak 26 amorcé, realm `ivoire-lms` (rôles métier,
       clients `moodle` / `shell-ui` / `control-plane`, revendication `tenant_id`)
-- [x] Mailpit et MinIO pour travailler sur le courriel et le stockage objet dès le début
+- [x] Mailpit et Garage pour travailler sur le courriel et le stockage objet dès le début
+- [x] Revue des briques amont : MinIO retiré (dépôt archivé), Redis remplacé par
+      Valkey, Keycloak remonté en 26.7.4, extension phpredis ajoutée au Dockerfile
+      (son absence aurait fait échouer les sessions au premier affichage)
+- [x] Détecteur de briques mortes (`make veille`) et contrôle hebdomadaire en CI
+      — ADR 0005, catalogue dans `docs/architecture/02-briques-open-source.md`
 - [x] `scripts/bootstrap.sh` : point d'entrée unique, idempotent, secrets aléatoires
 - [x] ADR 0004 : phasage des moteurs, Open edX reporté en phase 2
 - [ ] **Validation réelle** : `make bootstrap` exécuté de bout en bout sur un poste

@@ -19,13 +19,20 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
         gd intl zip soap exif opcache pgsql pdo_pgsql \
     && docker-php-ext-enable opcache
 
+# phpredis : indispensable dès qu'on utilise Redis/Valkey pour les sessions.
+# public/lib/classes/session/redis.php refuse de démarrer sans lui
+# (extension_loaded('redis')). Valkey étant compatible au niveau protocole,
+# la même extension sert pour les deux.
+RUN pecl install redis \
+    && docker-php-ext-enable redis
+
 # Contrôle bloquant : si une extension exigée par Moodle 5.2 manque, la
 # construction échoue ici, avec un message clair, plutôt que de produire une
 # image qui tombera en panne à l'installation.
 RUN set -eu ; \
     requises="ctype curl dom exif fileinfo filter gd hash iconv intl json \
               mbstring openssl pcre pgsql simplexml sodium spl xml xmlreader \
-              zip zlib opcache" ; \
+              zip zlib opcache redis" ; \
     absentes="" ; \
     for ext in $requises ; do \
         php -m | tr 'A-Z' 'a-z' | grep -qx "$ext" || absentes="$absentes $ext" ; \

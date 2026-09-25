@@ -69,7 +69,7 @@ de l'image PHP 8.3, installation de la base Moodle en français, démarrage de l
 | Moodle | http://localhost:8080 |
 | Keycloak (identité unique) | http://localhost:8081 |
 | Mailpit (courriels interceptés) | http://localhost:8025 |
-| MinIO (stockage objet) | http://localhost:9001 |
+| Garage (stockage objet S3) | http://localhost:3900 |
 
 Les identifiants sont dans `.env`, qui n'est jamais committé.
 `make help` liste toutes les commandes. Détails et points de conception :

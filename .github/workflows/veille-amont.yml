@@ -1,0 +1,76 @@
+name: Veille des briques amont
+
+on:
+  schedule:
+    # Tous les lundis à 06h13 UTC. Minute décalée volontairement : les tâches
+    # planifiées sur la minute 0 sont massivement retardées chez GitHub.
+    - cron: "13 6 * * 1"
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/verifier-amont.py"
+      - ".github/workflows/veille-amont.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  veille:
+    name: Détecter les briques mortes ou dormantes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Vérifier la logique du détecteur
+        run: python3 scripts/verifier-amont.py --autotest
+
+      - name: Examiner les briques amont
+        id: veille
+        env:
+          # Relève la limite de l'API GitHub de 60 à 5000 requêtes par heure.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          python3 scripts/verifier-amont.py | tee rapport.txt
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          python3 scripts/verifier-amont.py --json > rapport.json
+          set -e
+
+      - name: Publier le rapport dans le résumé de l'exécution
+        if: always()
+        run: |
+          {
+            echo "## Veille des briques amont"
+            echo
+            echo '```'
+            cat rapport.txt 2>/dev/null || echo "(rapport indisponible)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ouvrir une issue si une brique est morte
+        if: steps.veille.outputs.code == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          titre="Brique amont morte détectée"
+          # Ne pas empiler les doublons : on réutilise l'issue ouverte s'il y en a une.
+          existante="$(gh issue list --state open --search "$titre in:title" \
+                        --json number --jq '.[0].number' 2>/dev/null || true)"
+          corps="$(printf 'La veille automatique a détecté au moins une brique amont morte.\n\n```\n%s\n```\n\nRègle du projet (ADR 0005) : une brique morte se remplace, elle ne se tolère pas.\n' "$(cat rapport.txt)")"
+          if [ -n "$existante" ] && [ "$existante" != "null" ]; then
+            gh issue comment "$existante" --body "$corps"
+          else
+            gh issue create --title "$titre" --body "$corps" --label "amont,sécurité" 2>/dev/null \
+              || gh issue create --title "$titre" --body "$corps"
+          fi
+
+      - name: Échouer si une brique est morte ou non vérifiable
+        if: steps.veille.outputs.code != '0'
+        run: |
+          echo "::error::Veille non concluante ou brique morte détectée (code ${{ steps.veille.outputs.code }})."
+          exit 1

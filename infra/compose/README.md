@@ -20,6 +20,7 @@ make ps            # état
 make logs          # journaux (make logs SERVICE=moodle-php pour un seul)
 make shell         # console dans le conteneur PHP
 make cron          # forcer une exécution du cron Moodle
+make veille        # vérifier qu'aucune brique amont n'est morte
 make down          # arrêter (les données restent)
 make purge         # DESTRUCTIF : supprime aussi les volumes
 ```
@@ -31,11 +32,11 @@ make purge         # DESTRUCTIF : supprime aussi les volumes
 | `moodle-web` | 8080 | nginx, racine web sur `engines/moodle/public` |
 | `moodle-php` | — | PHP 8.3-FPM, code monté depuis le sous-module |
 | `moodle-cron` | — | boucle le cron Moodle toutes les 60 s |
-| `postgres` | 5432 | PostgreSQL 16, bases `moodle` et `keycloak` |
-| `redis` | — | sessions et cache Moodle |
+| `postgres` | 5432 | PostgreSQL 17, bases `moodle` et `keycloak` |
+| `valkey` | — | sessions et cache Moodle (fork BSD-3 de Redis) |
 | `keycloak` | 8081 | identité unique, realm `ivoire-lms` importé au démarrage |
 | `mailpit` | 8025 | intercepte les courriels sortants |
-| `minio` | 9000 / 9001 | stockage objet compatible S3 |
+| `garage` | 3900 / 3903 | stockage objet compatible S3 (remplace MinIO, archivé) |
 
 ## Points de conception à connaître
 
@@ -69,3 +70,23 @@ Voir `docs/adr/0003-bigbluebutton-auto-heberge.md`.
 Décision de calendrier, pas d'architecture : voir
 `docs/adr/0004-phasage-des-moteurs.md`. Le sous-module reste figé dans `engines/`,
 prêt à être activé en phase 2 via Tutor.
+
+## Garage demande une initialisation
+
+Un nœud Garage neuf refuse toute écriture tant qu'aucune disposition (*layout*) ne
+lui a été assignée. `make bootstrap` le fait ; `make garage-init` le rejoue si
+besoin. La configuration de développement est à **un seul nœud, réplication 1** :
+en production il faut au moins trois nœuds sur des sites distincts et
+`replication_factor = 3`.
+
+Garage n'a pas d'interface web d'administration — c'est une API S3 et une API
+d'administration. C'est un choix assumé de l'éditeur, et l'une des raisons pour
+lesquelles il reste léger.
+
+## Pourquoi Valkey et pas Redis
+
+Licence : Valkey est en BSD-3-Clause sous gouvernance Linux Foundation, Redis 8 est
+en AGPLv3. Cohérent avec notre stratégie de limiter l'exposition au copyleft
+(ADR 0004). Compatible au niveau protocole : l'extension phpredis et le
+gestionnaire de sessions de Moodle fonctionnent sans modification. Détails dans
+`docs/architecture/02-briques-open-source.md`.
