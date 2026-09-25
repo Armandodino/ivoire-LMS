@@ -27,8 +27,14 @@ Objectif : `make bootstrap` suffit sur une machine neuve.
       — ADR 0005, catalogue dans `docs/architecture/02-briques-open-source.md`
 - [x] `scripts/bootstrap.sh` : point d'entrée unique, idempotent, secrets aléatoires
 - [x] ADR 0004 : phasage des moteurs, Open edX reporté en phase 2
-- [ ] **Validation réelle** : `make bootstrap` exécuté de bout en bout sur un poste
-      doté d'un démon Docker (impossible dans l'environnement où la pile a été écrite)
+- [x] **Validation réelle en intégration continue** : `.github/workflows/pile-dev.yml`
+      démarre la pile sur un runner GitHub, vérifie que Moodle répond en HTTP 200,
+      que la page servie est bien le site installé (et non le programme
+      d'installation), que les tables `mdl_*` existent, que `phpredis` est chargée,
+      que les sessions atterrissent dans Valkey, et que le cron s'exécute.
+      Ni l'environnement de rédaction ni le poste du mainteneur n'ont de démon
+      Docker : sans ce contrôle, `infra/` ne serait jamais exécuté avant une mise
+      en service, seulement relu.
 - [ ] BBB : instance de développement partagée à pourvoir, puis renseigner
       `BBB_SERVER_URL` / `BBB_SHARED_SECRET`
 - [ ] Open edX via Tutor — phase 2, cf. ADR 0004

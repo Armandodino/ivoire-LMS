@@ -52,6 +52,15 @@ docs/              Architecture, ADR, licences, feuille de route
 
 Prérequis : Docker avec le greffon Compose v2, et Git.
 
+Sur Linux, Docker n'a **pas** besoin de la virtualisation matérielle : il s'appuie
+sur les namespaces et cgroups du noyau. Seul Docker *Desktop* (Windows, macOS)
+exige VT-x/AMD-V pour sa machine virtuelle.
+
+Pas de Docker sous la main ? Ce n'est pas bloquant : la pile est démarrée et
+vérifiée à chaque modification de `infra/` par
+`.github/workflows/pile-dev.yml`, et GitHub Codespaces fournit un environnement
+avec Docker directement depuis ce dépôt.
+
 ```bash
 git clone https://github.com/Armandodino/ivoire-LMS.git
 cd ivoire-LMS

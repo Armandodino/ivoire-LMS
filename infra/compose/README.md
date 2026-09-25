@@ -43,7 +43,14 @@ make purge         # DESTRUCTIF : supprime aussi les volumes
 **Le code Moodle n'est pas copié dans l'image.** Il est monté depuis
 `engines/moodle`, qui est un sous-module figé. On modifie donc du code Moodle en
 modifiant le sous-module — ce qui est interdit (cf. `engines/README.md`). Nos
-développements passent par `plugins/moodle`, monté dans `public/local/ivoire`.
+développements passeront par `plugins/moodle`, greffé dans `public/local/`.
+
+Ce montage n'est **pas encore actif** : Moodle lit `version.php` pour chaque
+plugin qu'il détecte, et un répertoire dans `public/local/` sans `version.php`
+n'est pas un plugin valide. Tant qu'aucun plugin n'existe, le montage
+n'apporterait rien et pourrait faire échouer l'installation. Le
+`docker-compose.yml` contient la ligne à décommenter, par plugin, le jour où
+le premier est écrit.
 
 **`config.php` ne contient aucun secret.** Il lit l'environnement, fourni par
 `.env`. Le fichier est monté en lecture seule, ce qui empêche Moodle de le réécrire.

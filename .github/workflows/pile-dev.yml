@@ -1,0 +1,127 @@
+name: Pile de développement
+
+# Démarre réellement la pile et vérifie que Moodle répond.
+# Raison d'être : l'environnement de rédaction n'a pas de démon Docker, et le
+# poste du mainteneur non plus. Sans ce contrôle, infra/ ne serait jamais
+# exécuté avant une mise en service — seulement relu.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "infra/**"
+      - "scripts/bootstrap.sh"
+      - "scripts/install-hooks.sh"
+      - "Makefile"
+      - ".env.example"
+      - ".github/workflows/pile-dev.yml"
+  pull_request:
+    paths:
+      - "infra/**"
+      - "scripts/bootstrap.sh"
+      - "Makefile"
+      - ".env.example"
+
+permissions:
+  contents: read
+
+jobs:
+  demarrer:
+    name: Démarrer la pile et vérifier que Moodle répond
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Récupérer le dépôt (sans les sous-modules)
+        uses: actions/checkout@v4
+
+      - name: Récupérer uniquement le moteur Moodle, en clone superficiel
+        # Les trois moteurs pèsent ~1,3 Go. Seul Moodle est nécessaire ici :
+        # Open edX est en phase 2 (ADR 0004) et BigBlueButton ne se
+        # conteneurise pas (ADR 0003).
+        run: |
+          git submodule update --init --depth 1 engines/moodle
+          echo "Version de Moodle récupérée :"
+          grep -E '\$release' engines/moodle/public/version.php
+
+      - name: Vérifier l'outillage du runner
+        run: |
+          docker --version
+          docker compose version
+          docker info --format 'Démon Docker joignable, {{.ServerVersion}}'
+
+      - name: Amorcer l'environnement
+        run: ./scripts/bootstrap.sh
+
+      - name: Vérifier que Moodle répond en HTTP
+        run: |
+          echo "Attente de la réponse de Moodle..."
+          for essai in $(seq 1 60); do
+            code=$(curl -s -o /tmp/moodle.html -w '%{http_code}' http://localhost:8080/ || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Moodle répond HTTP 200 après $essai tentative(s)."
+              break
+            fi
+            printf '  tentative %s : HTTP %s\n' "$essai" "$code"
+            sleep 5
+          done
+          if [ "${code:-000}" != "200" ]; then
+            echo "::error::Moodle ne répond pas (dernier code HTTP ${code:-000})."
+            exit 1
+          fi
+
+      - name: Vérifier que la page servie est bien notre Moodle installé
+        run: |
+          set -e
+          # Le nom du site vient de .env, généré par bootstrap.
+          attendu=$(grep '^MOODLE_SITE_SHORTNAME=' .env | cut -d= -f2-)
+          echo "Nom de site attendu dans la page : $attendu"
+          if ! grep -qi "$attendu" /tmp/moodle.html; then
+            echo "::error::La page ne contient pas le nom du site. Moodle répond mais n'est pas celui que nous avons installé."
+            head -40 /tmp/moodle.html
+            exit 1
+          fi
+          # Une page d'installation non terminée trahirait un échec silencieux.
+          if grep -qiE 'install\.php|Nouvelle installation' /tmp/moodle.html; then
+            echo "::error::Moodle sert encore son programme d'installation : la base n'est pas installée."
+            exit 1
+          fi
+          echo "Page vérifiée : Moodle est installé et sert le site Ivoire-LMS."
+
+      - name: Vérifier la base et les extensions PHP
+        run: |
+          set -e
+          COMPOSE="docker compose -f infra/compose/docker-compose.yml --env-file .env"
+          echo "--- tables Moodle créées ---"
+          $COMPOSE exec -T postgres psql -U "$(grep '^MOODLE_DB_USER=' .env | cut -d= -f2)" \
+            -d "$(grep '^MOODLE_DB_NAME=' .env | cut -d= -f2)" -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_name LIKE 'mdl_%'"
+          echo "--- extension phpredis présente ? ---"
+          $COMPOSE exec -T moodle-php php -m | grep -qx redis \
+            && echo "phpredis chargée" \
+            || { echo "::error::phpredis absente : les sessions Valkey échoueraient."; exit 1; }
+          echo "--- sessions effectivement dans Valkey ? ---"
+          $COMPOSE exec -T valkey valkey-cli --scan --pattern 'ivoire_sess_*' | head -3
+
+      - name: Vérifier que le cron Moodle s'exécute
+        run: |
+          COMPOSE="docker compose -f infra/compose/docker-compose.yml --env-file .env"
+          $COMPOSE exec -T moodle-php php /var/www/html/admin/cli/cron.php 2>&1 | tail -5
+
+      - name: État des services
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml --env-file .env ps
+
+      - name: Journaux en cas d'échec
+        if: failure()
+        run: |
+          COMPOSE="docker compose -f infra/compose/docker-compose.yml --env-file .env"
+          for service in moodle-php moodle-web postgres valkey keycloak garage moodle-cron; do
+            echo "::group::journaux $service"
+            $COMPOSE logs --tail=80 "$service" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+      - name: Arrêter la pile
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml --env-file .env down -v

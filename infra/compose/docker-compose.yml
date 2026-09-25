@@ -81,8 +81,13 @@ services:
       # En Moodle 5 il vit à la RACINE : public/config.php n'est qu'un chargeur.
       - ../docker/moodle/config.php:/var/www/html/config.php:ro
       - moodledata:/var/www/moodledata
-      # Nos plugins sont greffés dans l'arborescence Moodle sans toucher au cœur.
-      - ../../plugins/moodle:/var/www/html/public/local/ivoire:ro
+      # Pas de montage de plugins/moodle pour l'instant : un répertoire placé
+      # dans public/local/ sans version.php n'est pas un plugin valide pour
+      # Moodle, qui lit version.php pour chaque plugin détecté. Tant que nous
+      # n'avons écrit aucun plugin, ce montage n'apporterait rien et pourrait
+      # faire échouer l'installation ou une montée de version. On ajoutera un
+      # montage précis, par plugin, quand le premier existera :
+      #   - ../../plugins/moodle/local_ivoire:/var/www/html/public/local/ivoire:ro
 
   moodle-web:
     image: nginx:1.30-alpine
