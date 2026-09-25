@@ -97,3 +97,20 @@ en AGPLv3. Cohérent avec notre stratégie de limiter l'exposition au copyleft
 (ADR 0004). Compatible au niveau protocole : l'extension phpredis et le
 gestionnaire de sessions de Moodle fonctionnent sans modification. Détails dans
 `docs/architecture/02-briques-open-source.md`.
+
+## Vérifier que la pile démarre encore
+
+Le contrôle `.github/workflows/pile-dev.yml` démarre la pile complète et vérifie
+que Moodle répond. Il se déclenche **à la main** : onglet *Actions* du dépôt,
+workflow « Pile de développement », bouton *Run workflow*.
+
+Il est volontairement manuel : il dure plusieurs minutes et n'a pas à se relancer
+à chaque poussée. À lancer après une modification de `infra/`, et avant une mise
+en service.
+
+Les contrôles rapides, eux, restent automatiques et tiennent en une seconde :
+
+```bash
+make check         # configuration Compose, syntaxes, tests shell
+make test-shell    # génération de secrets, lecture du .env, extensions PHP
+```

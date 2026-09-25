@@ -5,22 +5,12 @@ name: Pile de développement
 # poste du mainteneur non plus. Sans ce contrôle, infra/ ne serait jamais
 # exécuté avant une mise en service — seulement relu.
 
+# Déclenchement MANUEL uniquement, à la demande du mainteneur.
+# Ce contrôle démarre une pile complète : il est long, et il n'a pas à se
+# relancer à chaque poussée. On le lance depuis l'onglet Actions, bouton
+# « Run workflow », quand on veut vérifier que la pile démarre encore.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "infra/**"
-      - "scripts/bootstrap.sh"
-      - "scripts/install-hooks.sh"
-      - "Makefile"
-      - ".env.example"
-      - ".github/workflows/pile-dev.yml"
-  pull_request:
-    paths:
-      - "infra/**"
-      - "scripts/bootstrap.sh"
-      - "Makefile"
-      - ".env.example"
 
 permissions:
   contents: read
