@@ -24,7 +24,7 @@ hooks: ## Installe les garde-fous de commit (inclus dans bootstrap)
 	@./scripts/install-hooks.sh
 
 test-shell: ## Teste les scripts shell sans Docker (génération de secrets)
-	@./scripts/test-alea.sh
+	@./scripts/test-shell.sh
 
 check: ## Vérifie la cohérence de la pile sans rien démarrer
 	@test -f .env || { echo "Fichier .env absent — lance 'make bootstrap'." ; exit 1 ; }

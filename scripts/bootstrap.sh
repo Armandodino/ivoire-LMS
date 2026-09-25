@@ -8,6 +8,8 @@ cd "$RACINE"
 
 # shellcheck source=scripts/lib/alea.sh
 . "$RACINE/scripts/lib/alea.sh"
+# shellcheck source=scripts/lib/env.sh
+. "$RACINE/scripts/lib/env.sh"
 COMPOSE=(docker compose -f infra/compose/docker-compose.yml --env-file .env)
 
 vert()  { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -79,7 +81,9 @@ else
   jaune "  Le mot de passe administrateur Moodle est dans .env (MOODLE_ADMIN_PASSWORD)."
 fi
 
-set -a; . ./.env; set +a
+# On NE source PAS le .env : c'est un format Compose, pas un script shell.
+# Une valeur comme « Ivoire-LMS (développement) » ferait échouer bash.
+charger_env .env
 
 # ───────────────────────── 5. Construction ───────────────────────────────
 etape "Construction des images"
