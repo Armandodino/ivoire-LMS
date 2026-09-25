@@ -47,6 +47,52 @@ datée.** Concrètement :
    correctif de sécurité ; dans un LMS qui détient les données personnelles
    d'étudiants et des mouvements financiers, c'est inacceptable.
 
+## Dérogations : datées, motivées, et jamais silencieuses
+
+Le premier vrai signal du détecteur a été **Django 4.2, en fin de vie depuis le
+7 avril 2026** — la dépendance interne de Joanie (ADR 0006), que nous ne pouvons pas
+changer sans l'amont. Ce cas révèle qu'une règle « une brique morte fait échouer la
+CI » se heurte à la réalité : une CI rouge en permanence pour une cause qu'on ne
+peut pas corriger dans la journée finit ignorée, et le détecteur perd toute valeur.
+
+D'où le registre `DEROGATIONS` dans `scripts/verifier-amont.py`. Une dérogation
+comporte obligatoirement trois choses :
+
+- une **échéance** (`jusqu_au`) — passée cette date, la dérogation expire et l'échec
+  revient, sans intervention ;
+- un **motif** — pourquoi nous ne pouvons pas corriger maintenant ;
+- une **action** — ce qui doit être fait, nommément.
+
+Une brique dérogée est affichée `DEROG`, avec son motif et son action à chaque
+exécution. Ce n'est pas une mise sous silence : c'est une dette inscrite avec sa
+date d'exigibilité. **Aucune dérogation ne couvre une mise en production** — c'est
+une tolérance de développement, pas un permis d'exploiter.
+
+Une dérogation sans date ni action nommée n'a pas sa place dans ce registre.
+
+## Le contrôle doit se méfier de lui-même
+
+Le même épisode a mis au jour un **bogue dans le contrôle** : le workflow faisait
+
+```bash
+python3 scripts/verifier-amont.py | tee rapport.txt
+echo "code=$?" >> "$GITHUB_OUTPUT"
+```
+
+`$?` après un tube renvoie le code du **dernier** élément — celui de `tee`, donc
+toujours 0. Le détecteur signalait correctement une brique morte, et la CI passait
+au vert en sautant l'ouverture d'issue. Un outil de surveillance qui échoue en
+silence est pire que pas d'outil du tout, parce qu'il inspire une confiance qu'il ne
+mérite pas.
+
+Deux règles en découlent :
+
+1. **Ne jamais relever un code de sortie derrière un tube.** On redirige, on relève
+   le code, puis on affiche.
+2. **La logique du détecteur est testée** (`make veille-logique`, 13 cas hors
+   réseau, dérogations comprises) et le workflow affiche explicitement le code
+   relevé, pour qu'un enchaînement muet redevienne visible.
+
 Le détecteur ne doit **jamais** annoncer un succès quand il n'a rien pu vérifier :
 une panne réseau prise pour un feu vert est plus dangereuse qu'un échec franc. Il
 renvoie donc un code distinct (2) quand aucune brique n'a pu être examinée, et sa

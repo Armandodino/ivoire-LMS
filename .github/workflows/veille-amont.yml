@@ -35,11 +35,17 @@ jobs:
           # Relève la limite de l'API GitHub de 60 à 5000 requêtes par heure.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Pas de « ... | tee » ici : $? renverrait le code de tee, toujours 0,
+          # et une brique morte passerait inaperçue. On redirige, on relève le
+          # code, puis on affiche. Une seule exécution : --json-vers évite un
+          # second passage sur l'API.
           set +e
-          python3 scripts/verifier-amont.py | tee rapport.txt
-          echo "code=$?" >> "$GITHUB_OUTPUT"
-          python3 scripts/verifier-amont.py --json > rapport.json
+          python3 scripts/verifier-amont.py --json-vers rapport.json > rapport.txt 2>&1
+          code=$?
           set -e
+          cat rapport.txt
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Code de sortie du détecteur : $code"
 
       - name: Publier le rapport dans le résumé de l'exécution
         if: always()
@@ -74,3 +80,8 @@ jobs:
         run: |
           echo "::error::Veille non concluante ou brique morte détectée (code ${{ steps.veille.outputs.code }})."
           exit 1
+
+      - name: Confirmer que le contrôle a bien conclu
+        if: steps.veille.outputs.code == '0'
+        run: |
+          echo "Veille concluante, aucune brique morte hors dérogation."

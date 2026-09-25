@@ -20,6 +20,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import pathlib
 import sys
 import urllib.error
 import urllib.request
@@ -48,6 +49,22 @@ BRIQUES: list[dict] = [
 ]
 
 MORTE, DORMANTE, VIVANTE, INCONNU = "MORTE", "DORMANTE", "VIVANTE", "INCONNU"
+DEROGEE = "DEROGEE"
+
+# Dérogations : une brique morte que nous ne pouvons pas remplacer nous-mêmes
+# aujourd'hui, avec une échéance et une action nommée. Ce n'est PAS un moyen de
+# faire taire le détecteur : passé l'échéance, la dérogation expire et l'échec
+# revient. Une dérogation sans date ni action n'a pas sa place ici.
+DEROGATIONS: dict[str, dict[str, str]] = {
+    "Django (Joanie)": {
+        "jusqu_au": "2026-12-31",
+        "motif": "Dépendance interne de Joanie, qui épingle Django<5 "
+                 "(src/backend/pyproject.toml). Nous ne pouvons pas la changer "
+                 "sans l'amont. Aucune mise en production avec cette version.",
+        "action": "Vérifier si l'amont a migré vers Django 5 ; sinon proposer le "
+                  "portage en amont. Voir ADR 0006, section Réserve à surveiller.",
+    },
+}
 
 # Date de référence des cas de test, pour que --autotest soit reproductible.
 DATE_TEST = dt.date(2026, 9, 25)
@@ -104,6 +121,23 @@ def classer_cycle(infos: dict, cycle: str, aujourdhui: dt.date) -> tuple[str, st
     return VIVANTE, "aucune fin de vie annoncée"
 
 
+def appliquer_derogation(resultat: dict, aujourdhui: dt.date) -> dict:
+    """Requalifie une brique MORTE couverte par une dérogation non expirée."""
+    if resultat["etat"] != MORTE:
+        return resultat
+    derogation = DEROGATIONS.get(resultat["nom"])
+    if not derogation:
+        return resultat
+    echeance = dt.date.fromisoformat(derogation["jusqu_au"])
+    if aujourdhui > echeance:
+        resultat["detail"] += f" — DÉROGATION EXPIRÉE le {derogation['jusqu_au']}"
+        return resultat
+    resultat["etat"] = DEROGEE
+    resultat["derogation"] = derogation
+    resultat["detail"] += f" — dérogation jusqu'au {derogation['jusqu_au']}"
+    return resultat
+
+
 def examiner(brique: dict, seuil: int) -> dict:
     resultat = {"nom": brique["nom"], "role": brique["role"], "etat": INCONNU, "detail": ""}
 
@@ -116,7 +150,7 @@ def examiner(brique: dict, seuil: int) -> dict:
         age = _jours_depuis(depot.get("pushed_at"))
         resultat["jours"] = age
         resultat["etat"], resultat["detail"] = classer_depot(depot, age, seuil)
-        return resultat
+        return appliquer_derogation(resultat, dt.date.today())
 
     produit, cycle = brique["eol"], brique["cycle"]
     resultat["source"] = f"endoflife.date/{produit}#{cycle}"
@@ -125,7 +159,7 @@ def examiner(brique: dict, seuil: int) -> dict:
         resultat["detail"] = "cycle de vie injoignable"
         return resultat
     resultat["etat"], resultat["detail"] = classer_cycle(infos, cycle, dt.date.today())
-    return resultat
+    return appliquer_derogation(resultat, dt.date.today())
 
 
 def autotest() -> int:
@@ -141,6 +175,28 @@ def autotest() -> int:
         ("cycle fin de vie dans 3 ans",     classer_cycle({"eol": "2029-11-01"}, "17", DATE_TEST), VIVANTE),
         ("cycle sans fin de vie annoncée",  classer_cycle({}, "1", DATE_TEST),                VIVANTE),
     ]
+
+    # La dérogation ne doit couvrir qu'une brique morte, et seulement avant son échéance.
+    derog = {"jusqu_au": "2026-12-31", "motif": "m", "action": "a"}
+    DEROGATIONS["__test__"] = derog
+    cas_derog = [
+        ("dérogation avant échéance",
+         appliquer_derogation({"nom": "__test__", "etat": MORTE, "detail": "x"}, DATE_TEST),
+         DEROGEE),
+        ("dérogation expirée",
+         appliquer_derogation({"nom": "__test__", "etat": MORTE, "detail": "x"},
+                              dt.date(2027, 1, 1)),
+         MORTE),
+        ("brique sans dérogation",
+         appliquer_derogation({"nom": "__inconnue__", "etat": MORTE, "detail": "x"}, DATE_TEST),
+         MORTE),
+        ("dérogation ne requalifie pas une brique vivante",
+         appliquer_derogation({"nom": "__test__", "etat": VIVANTE, "detail": "x"}, DATE_TEST),
+         VIVANTE),
+    ]
+    del DEROGATIONS["__test__"]
+    for libelle, res, attendu in cas_derog:
+        cas.append((libelle, (res["etat"], res["detail"]), attendu))
     echecs = 0
     for libelle, (etat, detail), attendu in cas:
         ok = etat == attendu
@@ -161,6 +217,9 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="sortie lisible par une machine")
     ap.add_argument("--autotest", action="store_true",
                     help="vérifie la logique de classement sans réseau, puis quitte")
+    ap.add_argument("--json-vers", metavar="FICHIER",
+                    help="écrit aussi le rapport JSON dans ce fichier "
+                         "(évite une seconde exécution, donc un second appel réseau)")
     args = ap.parse_args()
 
     if args.autotest:
@@ -168,10 +227,15 @@ def main() -> int:
 
     resultats = [examiner(b, args.seuil_jours) for b in BRIQUES]
 
+    if args.json_vers:
+        pathlib.Path(args.json_vers).write_text(
+            json.dumps(resultats, ensure_ascii=False, indent=2), encoding="utf-8")
+
     if args.json:
         print(json.dumps(resultats, ensure_ascii=False, indent=2))
     else:
-        symbole = {VIVANTE: "  ok  ", DORMANTE: " ATTN ", MORTE: " MORTE", INCONNU: "  ??  "}
+        symbole = {VIVANTE: "  ok  ", DORMANTE: " ATTN ", MORTE: " MORTE",
+                   DEROGEE: " DEROG", INCONNU: "  ??  "}
         print(f"{'état':^7} {'brique':<16} {'rôle':<26} détail")
         print("-" * 96)
         for r in resultats:
@@ -179,6 +243,7 @@ def main() -> int:
 
     mortes = [r for r in resultats if r["etat"] == MORTE]
     dormantes = [r for r in resultats if r["etat"] == DORMANTE]
+    derogees = [r for r in resultats if r["etat"] == DEROGEE]
     inconnues = [r for r in resultats if r["etat"] == INCONNU]
 
     if not args.json:
@@ -187,11 +252,19 @@ def main() -> int:
             print(f"ÉCHEC : {len(mortes)} brique(s) morte(s) — il faut les remplacer, pas les tolérer :")
             for r in mortes:
                 print(f"  - {r['nom']} ({r['role']}) : {r['detail']}")
+        if derogees:
+            print(f"Dérogations en cours : {len(derogees)} — mortes mais tolérées "
+                  f"temporairement, jamais en production :")
+            for r in derogees:
+                d = r["derogation"]
+                print(f"  - {r['nom']} jusqu'au {d['jusqu_au']}")
+                print(f"      motif  : {d['motif']}")
+                print(f"      action : {d['action']}")
         if dormantes:
             print(f"Vigilance : {len(dormantes)} brique(s) dormante(s), à surveiller.")
         if inconnues:
             print(f"Non vérifiées : {len(inconnues)} (réseau, quota d'API ou source indisponible).")
-        if not mortes and not dormantes and not inconnues:
+        if not mortes and not dormantes and not inconnues and not derogees:
             print("Toutes les briques amont sont vivantes.")
 
     # Ne jamais annoncer un succès quand rien n'a pu être vérifié : une panne
