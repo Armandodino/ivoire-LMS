@@ -78,7 +78,7 @@ actifs au moment de la vérification.
 
 | Projet | Ce qu'il fait | Dernière activité | Décision |
 |---|---|---|---|
-| **Joanie** | ERP sans interface pour l'éducation : inscriptions, abonnements, **paiement**, **délivrance de certificats** | 22/09/2026 | **candidat fort — jalon 3 et 5** |
+| **Joanie** | ERP sans interface pour l'éducation : inscriptions, **paiement échelonné**, devis, conventions, achats groupés, **certificats signés** | pointe de `main` au 04/09/2026, 180 commits en 2026 | **ADOPTÉ — MIT — voir ADR 0006** |
 | **Ralph** | Learning Record Store xAPI, pour les traces d'apprentissage | 25/09/2026 | **candidat — jalon 8** |
 | **Warren** | Visualisation des données d'apprentissage, adossé à xAPI | 22/08/2026 | **candidat — jalon 8** |
 | **Richie** | CMS Django de portail de formation et catalogue de cours | 25/09/2026 | **candidat — phase 2** |
@@ -90,13 +90,17 @@ inscriptions, abonnements, paiement, certificats. Écrit en Python/Django par un
 opérateur public qui exploite une plateforme à grande échelle, en français, avec de
 vrais utilisateurs. Réécrire cela nous coûterait des mois.
 
-Ce qu'il faut vérifier avant d'adopter, et qui n'est pas tranché ici : sa licence
-exacte, son couplage à Open edX (il a été conçu dans cet écosystème, or notre
-phase 1 s'appuie sur Moodle), et sa capacité multi-tenant. Surtout : **son moteur de
-paiement est conçu pour des prestataires européens** — le Mobile Money ivoirien sera
-à brancher nous-mêmes quoi qu'il arrive. La bonne question est donc « Joanie nous
-épargne-t-il le référentiel et les certificats ? », pas « Joanie règle-t-il le
-paiement ? ».
+**Évalué par lecture du code le 25/09/2026, et adopté.** Les trois doutes sont
+levés : licence **MIT** (aucun copyleft, nos ajouts restent privés), **backend
+Moodle présent en amont** avec ses tests — il n'est donc pas couplé à Open edX — et
+tous les points d'extension utiles (prestataire de paiement, handler LMS, calendrier
+des jours fériés) sont **branchables par configuration**, donc sans fork.
+
+Deux limites établies et assumées. Il **n'est pas multi-tenant** (`SITE_ID = 1`) :
+une instance par tenant, le cloisonnement reste à notre charge. Et son échéancier
+**prélève sur une carte enregistrée sans intervention du client**, ce que le Mobile
+Money ne permet pas : il faut le remplacer par un enchaînement pousser-pour-payer.
+Détail et preuves dans `docs/adr/0006-joanie-socle-commerce-et-certificats.md`.
 
 **Ralph et Warren** répondent au besoin d'analyse pédagogique sans rien écrire :
 un LRS xAPI plus sa couche de visualisation, déjà utilisés en production pour des

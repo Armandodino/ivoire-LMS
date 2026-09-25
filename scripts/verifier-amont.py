@@ -36,10 +36,15 @@ BRIQUES: list[dict] = [
     {"nom": "Valkey",          "github": "valkey-io/valkey",              "role": "sessions et cache"},
     {"nom": "Garage",          "github": "deuxfleurs-org/garage",         "role": "stockage objet S3"},
     {"nom": "Mailpit",         "github": "axllent/mailpit",               "role": "courriels en dev"},
+    # Socle commerce et certificats (ADR 0006)
+    {"nom": "Joanie",          "github": "openfun/joanie",                "role": "commerce, contrats, certificats"},
+    {"nom": "Ralph",           "github": "openfun/ralph",                 "role": "LRS xAPI (candidat, jalon 8)"},
     # Produits suivis par cycle de vie plutôt que par dépôt
     {"nom": "PostgreSQL",      "eol": "postgresql", "cycle": "17",        "role": "base de données"},
     {"nom": "PHP",             "eol": "php",        "cycle": "8.3",       "role": "exécution Moodle"},
     {"nom": "nginx",           "eol": "nginx",      "cycle": "1.30",      "role": "serveur web"},
+    # Joanie épingle Django<5 : réserve consignée dans l'ADR 0006.
+    {"nom": "Django (Joanie)", "eol": "django",     "cycle": "4.2",       "role": "socle de Joanie"},
 ]
 
 MORTE, DORMANTE, VIVANTE, INCONNU = "MORTE", "DORMANTE", "VIVANTE", "INCONNU"

@@ -34,7 +34,8 @@ Le raisonnement est dans `docs/adr/0001-composition-plutot-que-fusion.md`.
 
 ```
 platform/          Notre code — la valeur du produit
-  control-plane/   Tenants, provisionnement, référentiel, quotas, scolarité
+  control-plane/   Tenants, provisionnement, quotas, scolarité ivoirienne
+                   (commerce, contrats et certificats : Joanie — ADR 0006)
   identity/        OIDC unique (Keycloak) pour tous les moteurs
   gateway/         Routage multi-tenant, TLS, limitation de débit
   shell-ui/        Interface unifiée Ivoire-LMS (PWA, hors-ligne)

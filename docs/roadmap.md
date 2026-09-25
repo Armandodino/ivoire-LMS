@@ -45,12 +45,21 @@ C'est le jalon qui transforme trois sites en une plateforme.
 
 ## Jalon 3 — Plan de contrôle et multi-tenant
 
-- [ ] Modèle de données : tenant, établissement, structure, utilisateur, cours,
-      inscription, résultat
+Périmètre réduit par l'adoption de Joanie (ADR 0006) : le référentiel commerce,
+les contrats, les devis et les certificats ne sont plus à écrire.
+
+- [x] Décision : Joanie (MIT) comme socle commerce, contrats et certificats,
+      déployé non modifié, une instance par tenant — ADR 0006
+- [ ] Joanie dans la pile de développement, branché sur Moodle via son
+      `MoodleLMSBackend` (services web Moodle)
+- [ ] Cloisonnement multi-tenant : **reste entièrement notre travail**, Joanie
+      étant mono-site (`SITE_ID = 1`)
 - [ ] API de provisionnement : créer un tenant de bout en bout, automatiquement
+      (Moodle + Joanie + realm Keycloak)
 - [ ] Résolution du tenant par sous-domaine dans `gateway`
-- [ ] Synchronisation référentiel → moteurs (idempotente, réconciliable)
+- [ ] Correspondance des identités entre Keycloak, Moodle et Joanie
 - [ ] Sauvegarde/restauration par tenant, testée par une restauration réelle
+- [ ] Vérifier la réserve Django de l'ADR 0006 avant toute mise en production
 
 ## Jalon 4 — Classe virtuelle Ivoire-LMS
 
@@ -62,10 +71,20 @@ C'est le jalon qui transforme trois sites en une plateforme.
 
 ## Jalon 5 — Facturation Mobile Money
 
-- [ ] Abstraction `billing` : intention de paiement, webhook, réconciliation,
-      idempotence, reprise sur incident
-- [ ] Connecteurs Orange Money, MTN MoMo, Moov Money, Wave
-- [ ] Échéanciers, période de grâce, blocage/déblocage d'accès automatique
+Réécrit après l'ADR 0006 : Joanie apporte l'échéancier, la facturation et les
+relances, mais son prélèvement automatique suppose une carte enregistrée, ce que
+le Mobile Money ne permet pas.
+
+- [ ] `MobileMoneyBackend`, sous-classe de `BasePaymentBackend` de Joanie, branchée
+      par `JOANIE_PAYMENT_BACKEND` — aucun fork de Joanie
+- [ ] Connecteurs Orange Money, MTN MoMo, Moov Money, Wave derrière ce backend
+- [ ] **Orchestrateur pousser-pour-payer** remplaçant `process_payment_schedules` :
+      à l'échéance, notifier (SMS/USSD), attendre la validation du client,
+      appliquer la période de grâce, puis bloquer l'accès
+- [ ] Calendrier des jours fériés ivoiriens, branché par `JOANIE_CALENDAR`
+- [ ] ADR : intégration directe aux API opérateurs ou agrégateur sous contrat
+      (décision d'entreprise autant que technique — demande des devis)
+- [ ] Idempotence stricte, réconciliation, reprise sur incident
 - [ ] Reçus et export comptable
 - [ ] Journal d'audit inaltérable sur tout mouvement financier
 
