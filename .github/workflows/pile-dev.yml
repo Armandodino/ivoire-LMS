@@ -35,6 +35,13 @@ jobs:
       - name: Récupérer le dépôt (sans les sous-modules)
         uses: actions/checkout@v4
 
+      - name: Tester les scripts shell avant tout travail coûteux
+        # Un bogue de génération de secrets doit échouer en deux secondes, pas
+        # après un clone de sous-module et une construction d'image. Ce test
+        # tourne sous set -euo pipefail, comme bootstrap.sh : c'est justement
+        # sous pipefail que le bogue du tube cassé se manifestait.
+        run: ./scripts/test-alea.sh
+
       - name: Récupérer uniquement le moteur Moodle, en clone superficiel
         # Les trois moteurs pèsent ~1,3 Go. Seul Moodle est nécessaire ici :
         # Open edX est en phase 2 (ADR 0004) et BigBlueButton ne se

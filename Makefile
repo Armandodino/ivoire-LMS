@@ -6,7 +6,7 @@ SERVICE  ?=
 
 .PHONY: help bootstrap hooks up down restart stop logs ps shell psql cron purge \
         engines engines-shallow engines-status engines-update verify-authors \
-        up-openedx check veille garage-init
+        up-openedx check veille garage-init test-shell
 
 help: ## Affiche cette aide
 	@echo "Ivoire-LMS — commandes disponibles"
@@ -23,6 +23,9 @@ bootstrap: ## Amorce tout l'environnement depuis zéro (à faire en premier)
 hooks: ## Installe les garde-fous de commit (inclus dans bootstrap)
 	@./scripts/install-hooks.sh
 
+test-shell: ## Teste les scripts shell sans Docker (génération de secrets)
+	@./scripts/test-alea.sh
+
 check: ## Vérifie la cohérence de la pile sans rien démarrer
 	@test -f .env || { echo "Fichier .env absent — lance 'make bootstrap'." ; exit 1 ; }
 	@test -f engines/moodle/config-dist.php || { echo "Sous-modules absents — lance 'make engines-shallow'." ; exit 1 ; }
@@ -30,6 +33,8 @@ check: ## Vérifie la cohérence de la pile sans rien démarrer
 	@php -l infra/docker/moodle/config.php >/dev/null 2>&1 \
 		&& echo "config.php Moodle : syntaxe valide" \
 		|| echo "config.php Moodle : contrôle ignoré (php absent du poste)"
+	@bash -n scripts/bootstrap.sh && echo "bootstrap.sh : syntaxe valide"
+	@$(MAKE) --no-print-directory test-shell
 
 # ─────────────────────────── Exploitation ────────────────────────────────
 up: ## Démarre la pile de développement (phase 1 : Moodle + Keycloak + outils)

@@ -1,0 +1,51 @@
+{
+  "name": "Ivoire-LMS",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  // Docker dans le conteneur : c'est ce qui permet de lancer `make bootstrap`
+  // sans rien installer sur son propre poste, et sans dépendre de la
+  // virtualisation matérielle du BIOS.
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": true,
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/php:1": { "version": "8.3" },
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" }
+  },
+
+  "hostRequirements": {
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+
+  "forwardPorts": [8080, 8081, 8025, 3900, 5432],
+  "portsAttributes": {
+    "8080": { "label": "Moodle", "onAutoForward": "notify" },
+    "8081": { "label": "Keycloak", "onAutoForward": "silent" },
+    "8025": { "label": "Mailpit", "onAutoForward": "silent" },
+    "3900": { "label": "Garage (API S3)", "onAutoForward": "silent" },
+    "5432": { "label": "PostgreSQL", "onAutoForward": "silent" }
+  },
+
+  // On ne lance pas `make bootstrap` automatiquement : la construction de
+  // l'image PHP et l'installation de Moodle prennent plusieurs minutes, et il
+  // vaut mieux que ce soit une décision explicite, dont on voit la sortie.
+  "postCreateCommand": "bash .devcontainer/apres-creation.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "bmewburn.vscode-intelephense-client",
+        "ms-python.python",
+        "redhat.vscode-yaml",
+        "streetsidesoftware.code-spell-checker-french"
+      ],
+      "settings": {
+        "files.eol": "\n",
+        "editor.rulers": [88]
+      }
+    }
+  }
+}

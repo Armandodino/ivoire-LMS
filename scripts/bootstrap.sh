@@ -5,6 +5,9 @@ set -euo pipefail
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RACINE"
+
+# shellcheck source=scripts/lib/alea.sh
+. "$RACINE/scripts/lib/alea.sh"
 COMPOSE=(docker compose -f infra/compose/docker-compose.yml --env-file .env)
 
 vert()  { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -55,7 +58,6 @@ git submodule status | sed 's/^/  /'
 
 # ───────────────────── 4. Fichier .env et secrets ────────────────────────
 etape "Configuration (.env)"
-motdepasse() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28; }
 
 if [ -f .env ]; then
   vert "  .env existe déjà — conservé tel quel"
@@ -63,11 +65,11 @@ else
   cp .env.example .env
   # Garage impose un secret RPC de 64 caractères hexadécimaux, format distinct
   # des autres mots de passe : on le traite avant la boucle générique.
-  hex64="$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c 64)"
+  hex64="$(alea_hex64)"
   awk -v s="$hex64" '{sub(/CHANGE_ME_HEX64/, s); print}' .env > .env.tmp && mv .env.tmp .env
   # Remplace chaque CHANGE_ME par un secret distinct.
   while grep -q 'CHANGE_ME' .env; do
-    secret="$(motdepasse)"
+    secret="$(alea_motdepasse)"
     # -i portable macOS/Linux : on passe par un fichier temporaire.
     awk -v s="$secret" 'BEGIN{done=0} { if (!done && index($0,"CHANGE_ME")) { sub(/CHANGE_ME/, s); done=1 } print }' .env > .env.tmp
     mv .env.tmp .env
