@@ -1,0 +1,171 @@
+# Environnement de développement Ivoire-LMS — jalon 1.
+#
+# Profil par défaut (phase 1, cf. docs/adr/0004-phasage-des-moteurs.md) :
+#   postgres, redis, moodle-php, moodle-web, keycloak, mailpit, minio
+# Profil openedx (phase 2, sur demande) : voir infra/compose/README.md
+#
+# Depuis la racine du dépôt :  make up
+name: ivoire-lms
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ─────────────────────────────── Données ───────────────────────────────
+  postgres:
+    # Moodle 5.2 exige PostgreSQL >= 16 (public/admin/environment.xml).
+    image: postgres:16-alpine
+    <<: *restart
+    environment:
+      POSTGRES_DB: ${MOODLE_DB_NAME:-moodle}
+      POSTGRES_USER: ${MOODLE_DB_USER:-moodle}
+      POSTGRES_PASSWORD: ${MOODLE_DB_PASSWORD:?MOODLE_DB_PASSWORD manquant dans .env}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MOODLE_DB_USER:-moodle} -d ${MOODLE_DB_NAME:-moodle}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    image: redis:7-alpine
+    <<: *restart
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ────────────────────────────── Moodle 5.2 ─────────────────────────────
+  moodle-php:
+    build:
+      context: ../..
+      dockerfile: infra/docker/moodle/Dockerfile
+    <<: *restart
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      MOODLE_DB_HOST: postgres
+      MOODLE_DB_NAME: ${MOODLE_DB_NAME:-moodle}
+      MOODLE_DB_USER: ${MOODLE_DB_USER:-moodle}
+      MOODLE_DB_PASSWORD: ${MOODLE_DB_PASSWORD:?}
+      MOODLE_WWWROOT: ${MOODLE_WWWROOT:-http://localhost:8080}
+      MOODLE_REDIS_HOST: redis
+      MOODLE_SMTP_HOST: mailpit:1025
+      MOODLE_DEBUG: ${MOODLE_DEBUG:-true}
+      # Configuration BBB injectée par platform/integrations/bbb (jalon 4).
+      BBB_SERVER_URL: ${BBB_SERVER_URL:-}
+      BBB_SHARED_SECRET: ${BBB_SHARED_SECRET:-}
+    volumes:
+      # Le sous-module est monté en lecture-écriture : on développe des plugins,
+      # on ne modifie pas le cœur (cf. engines/README.md).
+      - ../../engines/moodle:/var/www/html
+      # config.php lit son contenu depuis l'environnement, aucun secret en dur.
+      # En Moodle 5 il vit à la RACINE : public/config.php n'est qu'un chargeur.
+      - ../docker/moodle/config.php:/var/www/html/config.php:ro
+      - moodledata:/var/www/moodledata
+      # Nos plugins sont greffés dans l'arborescence Moodle sans toucher au cœur.
+      - ../../plugins/moodle:/var/www/html/public/local/ivoire:ro
+
+  moodle-web:
+    image: nginx:1.27-alpine
+    <<: *restart
+    depends_on: [moodle-php]
+    volumes:
+      - ../../engines/moodle:/var/www/html:ro
+      - ../../infra/docker/nginx/moodle.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${MOODLE_PORT:-8080}:80"
+
+  moodle-cron:
+    build:
+      context: ../..
+      dockerfile: infra/docker/moodle/Dockerfile
+    <<: *restart
+    depends_on: [moodle-php]
+    # Moodle exige l'exécution du cron toutes les minutes, sinon files d'attente,
+    # notifications et sauvegardes automatiques ne partent jamais.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          php /var/www/html/admin/cli/cron.php >/proc/1/fd/1 2>&1 || true
+          sleep 60
+        done
+    environment:
+      MOODLE_DB_HOST: postgres
+      MOODLE_DB_NAME: ${MOODLE_DB_NAME:-moodle}
+      MOODLE_DB_USER: ${MOODLE_DB_USER:-moodle}
+      MOODLE_DB_PASSWORD: ${MOODLE_DB_PASSWORD:?}
+      MOODLE_WWWROOT: ${MOODLE_WWWROOT:-http://localhost:8080}
+      MOODLE_REDIS_HOST: redis
+      BBB_SERVER_URL: ${BBB_SERVER_URL:-}
+      BBB_SHARED_SECRET: ${BBB_SHARED_SECRET:-}
+    volumes:
+      - ../../engines/moodle:/var/www/html
+      - ../docker/moodle/config.php:/var/www/html/config.php:ro
+      - moodledata:/var/www/moodledata
+
+  # ───────────────────── Identité unique (jalon 2) ──────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    <<: *restart
+    command: ["start-dev", "--import-realm"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD manquant dans .env}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${MOODLE_DB_USER:-moodle}
+      KC_DB_PASSWORD: ${MOODLE_DB_PASSWORD:?}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ../keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+
+  # ───────────────────── Outils de développement ───────────────────────
+  mailpit:
+    # Moodle envoie beaucoup de courriels ; on les intercepte au lieu de les
+    # envoyer réellement pendant le développement.
+    image: axllent/mailpit:latest
+    <<: *restart
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
+  minio:
+    # Stockage objet compatible S3 : les fichiers de cours et les enregistrements
+    # BBB iront là en production, autant travailler dessus dès le début.
+    image: minio/minio:latest
+    <<: *restart
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-ivoirelms}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?MINIO_PASSWORD manquant dans .env}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+
+volumes:
+  postgres-data:
+  redis-data:
+  moodledata:
+  minio-data:

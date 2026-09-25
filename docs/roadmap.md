@@ -8,16 +8,25 @@
 - [x] Analyse des licences et de ses conséquences commerciales
 - [x] Moteurs référencés en sous-modules Git, versions figées
 
-## Jalon 1 — Socle exploitable en local
+## Jalon 1 — Socle exploitable en local (écrit, reste à valider sur un poste avec Docker)
 
-Objectif : `make up` démarre Moodle, Open edX et un BBB accessible, sur une machine
-de développement.
+Objectif : `make bootstrap` suffit sur une machine neuve.
 
-- [ ] `infra/compose` : Moodle 5.2 (PHP 8.3 + PostgreSQL + Redis)
-- [ ] `infra/compose` : Open edX via Tutor, en configuration de développement
-- [ ] BBB : instance de développement distante partagée (BBB ne se conteneurise pas)
-- [ ] `platform/identity` : Keycloak amorcé, realm `ivoire-lms`
-- [ ] `scripts/bootstrap.sh` : un seul point d'entrée pour un poste neuf
+- [x] `infra/compose` : Moodle 5.2 (PHP 8.3 + PostgreSQL 16 + Redis), conforme aux
+      exigences lues dans `public/admin/environment.xml`
+- [x] `infra/docker/moodle` : image PHP 8.3 avec contrôle bloquant des 20 extensions requises
+- [x] `config.php` piloté par l'environnement, sans secret en dur, monté en lecture seule
+- [x] Conteneur de cron séparé, cron web interdit (`$CFG->cronclionly`)
+- [x] `platform/identity` : Keycloak 26 amorcé, realm `ivoire-lms` (rôles métier,
+      clients `moodle` / `shell-ui` / `control-plane`, revendication `tenant_id`)
+- [x] Mailpit et MinIO pour travailler sur le courriel et le stockage objet dès le début
+- [x] `scripts/bootstrap.sh` : point d'entrée unique, idempotent, secrets aléatoires
+- [x] ADR 0004 : phasage des moteurs, Open edX reporté en phase 2
+- [ ] **Validation réelle** : `make bootstrap` exécuté de bout en bout sur un poste
+      doté d'un démon Docker (impossible dans l'environnement où la pile a été écrite)
+- [ ] BBB : instance de développement partagée à pourvoir, puis renseigner
+      `BBB_SERVER_URL` / `BBB_SHARED_SECRET`
+- [ ] Open edX via Tutor — phase 2, cf. ADR 0004
 
 ## Jalon 2 — Identité unique
 

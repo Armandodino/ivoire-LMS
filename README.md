@@ -9,11 +9,17 @@ fonctionnement en réseau dégradé, canaux SMS/USSD, et règles de scolarité i
 
 ## Composition
 
-| Rôle | Moteur | Version suivie |
-|---|---|---|
-| LMS diplômant, évaluation, gestion de classe | Moodle | `MOODLE_502_STABLE` (5.2.3+) |
-| MOOC, catalogue ouvert, grande échelle | Open edX | `master` |
-| Classe virtuelle, enregistrement, tableau blanc | BigBlueButton | `v3.0.x-develop` |
+| Rôle | Moteur | Version suivie | Phase |
+|---|---|---|---|
+| LMS diplômant, évaluation, gestion de classe | Moodle | `MOODLE_502_STABLE` (5.2.3+) | **1** |
+| Classe virtuelle, enregistrement, tableau blanc | BigBlueButton | `v3.0.x-develop` | **1** |
+| MOOC, catalogue ouvert, grande échelle | Open edX | `master` | 2 |
+
+La phase 1 s'appuie sur Moodle et BigBlueButton seuls. Ce n'est pas un renoncement :
+c'est ce qui correspond au marché du diplôme visé, et cela **supprime toute
+obligation de publier notre propre code**, l'AGPL venant exclusivement d'Open edX.
+Le sous-module Open edX reste figé dans le dépôt, prêt pour la phase 2.
+Voir `docs/adr/0004-phasage-des-moteurs.md`.
 
 Ces moteurs sont des **sous-modules Git** dans `engines/`, non modifiés. Nos
 modifications éventuelles sont des patchs versionnés dans `patches/`.
@@ -43,21 +49,31 @@ docs/              Architecture, ADR, licences, feuille de route
 
 ## Démarrer
 
+Prérequis : Docker avec le greffon Compose v2, et Git.
+
 ```bash
-git clone --recurse-submodules https://github.com/Armandodino/ivoire-LMS.git
+git clone https://github.com/Armandodino/ivoire-LMS.git
 cd ivoire-LMS
-./scripts/install-hooks.sh     # obligatoire : garde-fous de commit
-make help
+make bootstrap
 ```
 
-Si le dépôt est déjà cloné sans les sous-modules :
+`make bootstrap` est idempotent et fait tout : vérification des prérequis,
+installation des garde-fous de commit, récupération des moteurs (~1,3 Go en clone
+superficiel), génération d'un `.env` avec des mots de passe aléatoires, construction
+de l'image PHP 8.3, installation de la base Moodle en français, démarrage de la pile.
 
-```bash
-make engines
-```
+À l'arrivée :
 
-Les moteurs pèsent environ 1,3 Go au total. `make engines-shallow` ne récupère que
-le dernier commit de chacun.
+| Service | Adresse |
+|---|---|
+| Moodle | http://localhost:8080 |
+| Keycloak (identité unique) | http://localhost:8081 |
+| Mailpit (courriels interceptés) | http://localhost:8025 |
+| MinIO (stockage objet) | http://localhost:9001 |
+
+Les identifiants sont dans `.env`, qui n'est jamais committé.
+`make help` liste toutes les commandes. Détails et points de conception :
+`infra/compose/README.md`.
 
 ## Licences
 

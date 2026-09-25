@@ -1,0 +1,112 @@
+{
+  "realm": "ivoire-lms",
+  "enabled": true,
+  "displayName": "Ivoire-LMS",
+  "displayNameHtml": "<strong>Ivoire-LMS</strong>",
+  "defaultLocale": "fr",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["fr", "en"],
+
+  "loginTheme": "keycloak",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+
+  "sslRequired": "external",
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "failureFactor": 10,
+
+  "passwordPolicy": "length(10) and notUsername() and notEmail() and passwordHistory(3)",
+
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 3600,
+  "ssoSessionMaxLifespan": 36000,
+
+  "roles": {
+    "realm": [
+      { "name": "apprenant",        "description": "Étudiant ou stagiaire inscrit" },
+      { "name": "enseignant",       "description": "Enseignant, formateur, tuteur" },
+      { "name": "scolarite",        "description": "Personnel de scolarité : inscriptions, notes, bulletins" },
+      { "name": "admin-etablissement", "description": "Administrateur d'un établissement (tenant)" },
+      { "name": "admin-plateforme", "description": "Administrateur Ivoire-LMS, tous tenants" }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "moodle",
+      "name": "Moodle — moteur LMS",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/admin/oauth2callback.php",
+        "http://localhost:8080/auth/oidc/*"
+      ],
+      "webOrigins": ["http://localhost:8080"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8080/*"
+      },
+      "defaultClientScopes": ["openid", "profile", "email", "roles", "web-origins"]
+    },
+    {
+      "clientId": "shell-ui",
+      "name": "Ivoire-LMS — interface unifiée",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      },
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"]
+    },
+    {
+      "clientId": "control-plane",
+      "name": "Plan de contrôle — service à service",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": false
+    }
+  ],
+
+  "clientScopes": [
+    {
+      "name": "tenant",
+      "description": "Rattachement de l'utilisateur à un établissement",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "tenant-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
+  "defaultDefaultClientScopes": ["openid", "profile", "email", "roles", "web-origins", "tenant"]
+}
