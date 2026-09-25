@@ -119,7 +119,97 @@ verifier "charger_env le lit sans broncher" "Ivoire-LMS (développement)" "$MOOD
 rm -f "$reel"
 
 echo
+echo "Contrôle des extensions PHP (hors Docker, sur des listes témoins) :"
+
+VERIF=infra/docker/moodle/verifier-extensions.sh
+modules="$(mktemp)"
+
+# Liste relevée telle quelle sur un runner GitHub, image php:8.3-fpm-bookworm.
+# Le point important : OPcache y apparaît sous « Zend OPcache ».
+cat > "$modules" <<'FIN'
+[PHP Modules]
+Core
+ctype
+curl
+date
+dom
+exif
+fileinfo
+filter
+gd
+hash
+iconv
+intl
+json
+libxml
+mbstring
+mysqlnd
+openssl
+pcre
+PDO
+pdo_pgsql
+pdo_sqlite
+pgsql
+Phar
+posix
+random
+readline
+redis
+Reflection
+session
+SimpleXML
+soap
+sodium
+SPL
+sqlite3
+standard
+tokenizer
+xml
+xmlreader
+xmlwriter
+Zend OPcache
+zip
+zlib
+
+[Zend Modules]
+Zend OPcache
+
+FIN
+
+# Pas de tube ici : on veut le code de sortie du script, pas celui d'un head.
+if "$VERIF" "$modules" >/dev/null 2>&1; then
+  printf '  [ok] %-52s\n' "liste réelle du runner acceptée (Zend OPcache reconnu)"
+else
+  printf '  [ECHEC] %s\n' "la liste réelle du runner est refusée"
+  "$VERIF" "$modules" 2>&1 | sed 's/^/          /' || true
+  echecs=$((echecs + 1))
+fi
+
+# Chaque absence doit être détectée, y compris celle d'OPcache.
+for absente in intl gd redis pgsql sodium; do
+  sans="$(mktemp)"
+  grep -vix "$absente" "$modules" > "$sans"
+  if "$VERIF" "$sans" >/dev/null 2>&1; then
+    printf '  [ECHEC] %s\n' "absence de '$absente' non détectée"
+    echecs=$((echecs + 1))
+  else
+    printf '  [ok] %-52s\n' "absence de '$absente' détectée"
+  fi
+  rm -f "$sans"
+done
+
+sans_opcache="$(mktemp)"
+grep -v 'OPcache' "$modules" > "$sans_opcache"
+if "$VERIF" "$sans_opcache" >/dev/null 2>&1; then
+  printf '  [ECHEC] %s\n' "absence d'OPcache non détectée"
+  echecs=$((echecs + 1))
+else
+  printf '  [ok] %-52s\n' "absence d'OPcache détectée"
+fi
+rm -f "$sans_opcache" "$modules"
+
+echo
 if [ "$echecs" -gt 0 ]; then
   echo "ÉCHEC : $echecs cas en erreur."; exit 1
 fi
-echo "Tous les cas passent : génération de secrets et lecture du .env."
+echo "Tous les cas passent : secrets, lecture du .env, extensions PHP."

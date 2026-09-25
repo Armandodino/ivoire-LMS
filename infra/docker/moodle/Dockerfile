@@ -26,24 +26,16 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
 RUN pecl install redis \
     && docker-php-ext-enable redis
 
-# Contrôle bloquant : si une extension exigée par Moodle 5.2 manque, la
-# construction échoue ici, avec un message clair, plutôt que de produire une
-# image qui tombera en panne à l'installation.
-RUN set -eu ; \
-    requises="ctype curl dom exif fileinfo filter gd hash iconv intl json \
-              mbstring openssl pcre pgsql simplexml sodium spl xml xmlreader \
-              zip zlib opcache redis" ; \
-    absentes="" ; \
-    for ext in $requises ; do \
-        php -m | tr 'A-Z' 'a-z' | grep -qx "$ext" || absentes="$absentes $ext" ; \
-    done ; \
-    if [ -n "$absentes" ] ; then \
-        echo "ERREUR : extensions PHP requises par Moodle 5.2 absentes :$absentes" >&2 ; \
-        echo "Extensions présentes :" >&2 ; php -m >&2 ; \
-        exit 1 ; \
-    fi ; \
-    echo "Toutes les extensions requises par Moodle 5.2 sont présentes." ; \
-    php -v
+# Contrôle bloquant : si une extension exigée manque, la construction échoue
+# ici, avec un message clair, plutôt que de produire une image qui tombera en
+# panne à l'installation. Le contrôle vit dans un script à part pour être
+# testable hors Docker (scripts/test-shell.sh) — la version en ligne précédente
+# ne l'était pas, et elle comportait un défaut : « php -m » affiche OPcache sous
+# le nom « Zend OPcache », qu'une comparaison exacte ne reconnaissait pas.
+COPY infra/docker/moodle/verifier-extensions.sh /usr/local/bin/verifier-extensions
+RUN chmod +x /usr/local/bin/verifier-extensions \
+    && /usr/local/bin/verifier-extensions \
+    && php -v
 
 # Réglages PHP adaptés au volume de fichiers de Moodle.
 COPY infra/docker/moodle/php-moodle.ini /usr/local/etc/php/conf.d/zz-moodle.ini
